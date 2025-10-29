@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartFit - Your Fashion Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="nav-brand">
+                <h1>👔 SmartFit</h1>
+            </div>
+            <div class="nav-links">
+                <a href="#" class="nav-link active" data-page="dashboard">Dashboard</a>
+                <a href="#" class="nav-link" data-page="wardrobe">Wardrobe</a>
+                <a href="#" class="nav-link" data-page="recommendations">Outfits</a>
+                <a href="#" class="nav-link" data-page="profile">Profile</a>
+            </div>
+        </nav>
+
+        <!-- Dashboard Page -->
+        <div class="page active" id="dashboard">
+            <div class="container">
+                <div class="page-header">
+                    <h2>Welcome to SmartFit</h2>
+                    <p class="subtitle">Your smart fashion assistant</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">👕</div>
+                        <div class="stat-value" id="stat-tops">0</div>
+                        <div class="stat-label">Tops</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">👖</div>
+                        <div class="stat-value" id="stat-bottoms">0</div>
+                        <div class="stat-label">Bottoms</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">👟</div>
+                        <div class="stat-value" id="stat-shoes">0</div>
+                        <div class="stat-label">Shoes</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">👗</div>
+                        <div class="stat-value" id="stat-accessories">0</div>
+                        <div class="stat-label">Accessories</div>
+                    </div>
+                </div>
+
+                <div class="today-outfit-card">
+                    <h3>Today's Outfit</h3>
+                    <div id="today-weather" class="weather-info">
+                        <span id="weather-temp">22°C</span>
+                        <span id="weather-condition">☀️ Sunny</span>
+                    </div>
+                    <div class="outfit-display" id="dashboard-outfit">
+                        <p class="empty-state">Upload clothes to get outfit suggestions!</p>
+                    </div>
+                    <div class="outfit-actions">
+                        <button class="btn btn-secondary" id="shuffle-dashboard">🔄 Shuffle</button>
+                        <button class="btn btn-primary" id="save-dashboard">💾 Save Outfit</button>
+                    </div>
+                </div>
+
+                <div class="quick-actions">
+                    <button class="btn btn-primary btn-large" data-navigate="wardrobe">
+                        📸 Upload Clothes
+                    </button>
+                    <button class="btn btn-secondary btn-large" data-navigate="recommendations">
+                        ✨ View All Outfits
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wardrobe Page -->
+        <div class="page" id="wardrobe">
+            <div class="container">
+                <div class="page-header">
+                    <h2>My Wardrobe</h2>
+                    <p class="subtitle">Upload and organize your clothes</p>
+                </div>
+
+                <div class="upload-section">
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-icon">📸</div>
+                        <h3>Upload Your Clothes</h3>
+                        <p>Drag and drop photos here or click to browse</p>
+                        <input type="file" id="file-input" accept="image/*" multiple hidden>
+                        <button class="btn btn-primary" id="upload-btn">Choose Files</button>
+                    </div>
+                </div>
+
+                <div class="category-tabs">
+                    <button class="tab-btn active" data-category="all">All Items</button>
+                    <button class="tab-btn" data-category="tops">👕 Tops</button>
+                    <button class="tab-btn" data-category="bottoms">👖 Bottoms</button>
+                    <button class="tab-btn" data-category="shoes">👟 Shoes</button>
+                    <button class="tab-btn" data-category="accessories">👗 Accessories</button>
+                </div>
+
+                <div class="wardrobe-grid" id="wardrobe-grid">
+                    <div class="empty-state-large">
+                        <div class="empty-icon">🧺</div>
+                        <h3>Your wardrobe is empty</h3>
+                        <p>Start by uploading photos of your clothes</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recommendations Page -->
+        <div class="page" id="recommendations">
+            <div class="container">
+                <div class="page-header">
+                    <h2>Outfit Recommendations</h2>
+                    <p class="subtitle">Smart outfits based on weather and your style</p>
+                </div>
+
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <label>Occasion:</label>
+                        <select id="occasion-filter">
+                            <option value="all">All</option>
+                            <option value="casual">Casual</option>
+                            <option value="formal">Formal</option>
+                            <option value="sporty">Sporty</option>
+                            <option value="evening">Evening</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Weather:</label>
+                        <select id="weather-filter">
+                            <option value="all">All</option>
+                            <option value="sunny">☀️ Sunny</option>
+                            <option value="cloudy">☁️ Cloudy</option>
+                            <option value="rainy">🌧️ Rainy</option>
+                            <option value="cold">❄️ Cold</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" id="generate-outfits">✨ Generate Outfits</button>
+                </div>
+
+                <div class="outfits-grid" id="outfits-grid">
+                    <div class="empty-state-large">
+                        <div class="empty-icon">✨</div>
+                        <h3>No outfits yet</h3>
+                        <p>Add clothes to your wardrobe to get personalized outfit suggestions</p>
+                    </div>
+                </div>
+
+                <div class="premium-banner">
+                    <div class="premium-content">
+                        <h3>🌟 Unlock Premium Features</h3>
+                        <p>Get unlimited outfit combinations and advanced AI style matching</p>
+                        <button class="btn btn-accent" id="upgrade-btn">Upgrade to Premium</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Page -->
+        <div class="page" id="profile">
+            <div class="container">
+                <div class="page-header">
+                    <h2>Profile & Settings</h2>
+                    <p class="subtitle">Customize your fashion preferences</p>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Style Preferences</h3>
+                    <div class="preference-grid">
+                        <label class="preference-item">
+                            <input type="checkbox" name="style" value="casual" checked>
+                            <span class="preference-label">👕 Casual</span>
+                        </label>
+                        <label class="preference-item">
+                            <input type="checkbox" name="style" value="formal">
+                            <span class="preference-label">👔 Formal</span>
+                        </label>
+                        <label class="preference-item">
+                            <input type="checkbox" name="style" value="sporty">
+                            <span class="preference-label">🏃 Sporty</span>
+                        </label>
+                        <label class="preference-item">
+                            <input type="checkbox" name="style" value="elegant">
+                            <span class="preference-label">✨ Elegant</span>
+                        </label>
+                        <label class="preference-item">
+                            <input type="checkbox" name="style" value="minimalist">
+                            <span class="preference-label">⚪ Minimalist</span>
+                        </label>
+                        <label class="preference-item">
+                            <input type="checkbox" name="style" value="colorful">
+                            <span class="preference-label">🌈 Colorful</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Location</h3>
+                    <div class="form-group">
+                        <label for="location-input">City (for weather data)</label>
+                        <input type="text" id="location-input" class="input" placeholder="Enter your city" value="New York">
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Sustainability Settings</h3>
+                    <div class="toggle-group">
+                        <label class="toggle-item">
+                            <input type="checkbox" id="sustainability-mode" checked>
+                            <span>Encourage reusing existing clothes</span>
+                        </label>
+                        <label class="toggle-item">
+                            <input type="checkbox" id="affiliate-mode">
+                            <span>Show matching items from partner stores</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Account Type</h3>
+                    <div class="account-card">
+                        <div class="account-info">
+                            <span class="account-badge">Free</span>
+                            <p>5 outfit combinations per day</p>
+                        </div>
+                        <button class="btn btn-accent" id="upgrade-profile-btn">Upgrade to Premium</button>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary btn-large" id="save-settings">Save Settings</button>
+            </div>
+        </div>
+
+        <!-- Premium Modal -->
+        <div class="modal" id="premium-modal">
+            <div class="modal-content">
+                <button class="modal-close" id="close-modal">&times;</button>
+                <div class="premium-modal-header">
+                    <h2>🌟 Upgrade to Premium</h2>
+                    <p>Unlock the full potential of SmartFit</p>
+                </div>
+                <div class="pricing-cards">
+                    <div class="pricing-card">
+                        <h3>Free</h3>
+                        <div class="price">$0<span>/month</span></div>
+                        <ul class="features-list">
+                            <li>✓ Upload up to 50 items</li>
+                            <li>✓ 5 outfit suggestions per day</li>
+                            <li>✓ Basic weather integration</li>
+                            <li>✓ Manual categorization</li>
+                        </ul>
+                        <button class="btn btn-secondary" disabled>Current Plan</button>
+                    </div>
+                    <div class="pricing-card featured">
+                        <div class="featured-badge">Most Popular</div>
+                        <h3>Premium</h3>
+                        <div class="price">$9.99<span>/month</span></div>
+                        <ul class="features-list">
+                            <li>✓ Unlimited wardrobe items</li>
+                            <li>✓ Unlimited outfit combinations</li>
+                            <li>✓ Advanced AI style matching</li>
+                            <li>✓ AI-powered categorization</li>
+                            <li>✓ Calendar event integration</li>
+                            <li>✓ Sustainability insights</li>
+                            <li>✓ Partner store suggestions</li>
+                        </ul>
+                        <button class="btn btn-accent" id="subscribe-btn">Subscribe Now</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div class="toast" id="toast"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
