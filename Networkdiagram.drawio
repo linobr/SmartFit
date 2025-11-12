@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" version="28.2.9">
   <diagram name="Seite-1" id="ahHdzXoWQRJH75gFokQI">
-    <mxGraphModel dx="1097" dy="592" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="906" dy="489" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -73,7 +73,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="Ewe6Ci6_7uG1AebiSDeV-30" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="Ewe6Ci6_7uG1AebiSDeV-28" target="Ewe6Ci6_7uG1AebiSDeV-10">
+        <mxCell id="Ewe6Ci6_7uG1AebiSDeV-30" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="Ewe6Ci6_7uG1AebiSDeV-28" target="Ewe6Ci6_7uG1AebiSDeV-10">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="Ewe6Ci6_7uG1AebiSDeV-28" value="Python Script with&amp;nbsp;&lt;div&gt;AI libraries&lt;/div&gt;" style="outlineConnect=0;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;shape=mxgraph.aws3.android;fillColor=light-dark(#FFD44F,#FFFFFF);gradientColor=none;" vertex="1" parent="1">
@@ -83,7 +83,10 @@
           <mxGeometry x="356" y="297" width="60" height="30" as="geometry" />
         </mxCell>
         <mxCell id="Ewe6Ci6_7uG1AebiSDeV-33" value="output" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" vertex="1" parent="1">
-          <mxGeometry x="300" y="401" width="60" height="30" as="geometry" />
+          <mxGeometry x="290" y="401" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="Ewe6Ci6_7uG1AebiSDeV-35" value="prompt" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="290" y="431" width="60" height="30" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
