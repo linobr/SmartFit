@@ -4,14 +4,10 @@ set -euo pipefail
 # ==== .env robust laden ====
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SEARCH_DIR="$SCRIPT_DIR"
-
-# Suche .env nach oben, bis Root erreicht ist
 while [[ "$SEARCH_DIR" != "/" && ! -f "$SEARCH_DIR/.env" ]]; do
   SEARCH_DIR="$(dirname "$SEARCH_DIR")"
 done
-
 ENV_FILE="$SEARCH_DIR/.env"
-
 if [[ -f "$ENV_FILE" ]]; then
   set -o allexport
   # shellcheck disable=SC1090
@@ -22,6 +18,9 @@ else
   echo "[WARN] .env nicht gefunden – nutze aktuelle ENV"
 fi
 
+# ===== optionales Flag via CLI =====
+FORCE_RECREATE="${FORCE_RECREATE:-0}"
+if [[ "${1:-}" == "--recreate" ]]; then FORCE_RECREATE="1"; fi
 
 # ===== Defaults =====
 AWS_PROFILE="${AWS_PROFILE:-default}"
@@ -32,7 +31,8 @@ DB_SG_NAME="${DB_SG_NAME:-${STACK_PREFIX}-db-sg}"
 DB_INSTANCE_TYPE="${DB_INSTANCE_TYPE:-t3.micro}"
 DB_NAME="${DB_NAME:-smartfit}"
 DB_USER="${DB_USER:-smartfit_admin}"
-DB_PASS="${DB_PASS:-Riethuesli>12345}"
+DB_PASS="${DB_PASS:-}"
+
 AMI_PARAM="/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 
 # ===== Checks =====
@@ -40,20 +40,18 @@ for v in AWS_PROFILE AWS_REGION STACK_PREFIX DB_NAME DB_USER DB_PASS; do
   [[ -z "${!v:-}" ]] && echo "[ERR] fehlende Variable: $v" >&2 && exit 1
 done
 
-# ===== Default VPC/Subnet =====
-# ===== Default VPC =====
+# ===== Default VPC / Subnet finden =====
 VPC_ID=$(aws ec2 describe-vpcs --region "$AWS_REGION" --profile "$AWS_PROFILE" \
   --filters Name=isDefault,Values=true --query "Vpcs[0].VpcId" --output text)
 [[ -z "$VPC_ID" || "$VPC_ID" == "None" ]] && { echo "[ERR] Keine Default VPC."; exit 1; }
 
-# ===== AZ finden, die den Instance-Typ unterstützt =====
 AZS=$(aws ec2 describe-instance-type-offerings \
   --region "$AWS_REGION" --profile "$AWS_PROFILE" \
   --location-type availability-zone \
   --filters Name=instance-type,Values="$DB_INSTANCE_TYPE" \
   --query "InstanceTypeOfferings[].Location" --output text)
 
-SUBNET_ID=""
+SUBNET_ID=""; SELECTED_AZ=""
 for az in $AZS; do
   cand=$(aws ec2 describe-subnets --region "$AWS_REGION" --profile "$AWS_PROFILE" \
     --filters Name=vpc-id,Values="$VPC_ID" Name=availability-zone,Values="$az" \
@@ -66,8 +64,7 @@ done
 [[ -z "$SUBNET_ID" ]] && { echo "[ERR] Kein passendes Subnet für $DB_INSTANCE_TYPE gefunden."; exit 1; }
 echo "[INFO] Verwende Subnet $SUBNET_ID in AZ $SELECTED_AZ (unterstützt $DB_INSTANCE_TYPE)"
 
-
-# ===== DB SG (nur intern, Port 5432 – Ingress-Berechtigung folgt im Web-Script) =====
+# ===== DB SG (nur intern; 5432 per Web-SG) =====
 DB_SG_ID=$(aws ec2 describe-security-groups --region "$AWS_REGION" --profile "$AWS_PROFILE" \
   --filters Name=group-name,Values="$DB_SG_NAME" Name=vpc-id,Values="$VPC_ID" \
   --query "SecurityGroups[0].GroupId" --output text 2>/dev/null || true)
@@ -80,11 +77,19 @@ else
   echo "[INFO] DB SG reuse: $DB_SG_ID"
 fi
 
-# ===== Reuse Instance? =====
+# ===== Reuse / ggf. Recreate =====
 EXIST_ID=$(aws ec2 describe-instances --region "$AWS_REGION" --profile "$AWS_PROFILE" \
   --filters Name=tag:Name,Values="$DB_INSTANCE_NAME" Name=instance-state-name,Values=pending,running,stopping,stopped \
   --query "Reservations[0].Instances[0].InstanceId" --output text 2>/dev/null || true)
-if [[ -n "$EXIST_ID" && "$EXIST_ID" != "None" ]]; then
+
+if [[ -n "${EXIST_ID:-}" && "$EXIST_ID" != "None" && "$FORCE_RECREATE" == "1" ]]; then
+  echo "[INFO] FORCE_RECREATE=1 -> terminate $EXIST_ID"
+  aws ec2 terminate-instances --instance-ids "$EXIST_ID" --region "$AWS_REGION" --profile "$AWS_PROFILE" >/dev/null
+  aws ec2 wait instance-terminated --instance-ids "$EXIST_ID" --region "$AWS_REGION" --profile "$AWS_PROFILE"
+  EXIST_ID=""
+fi
+
+if [[ -n "${EXIST_ID:-}" && "$EXIST_ID" != "None" ]]; then
   PRIV=$(aws ec2 describe-instances --instance-ids "$EXIST_ID" --region "$AWS_REGION" --profile "$AWS_PROFILE" \
     --query "Reservations[0].Instances[0].PrivateIpAddress" --output text)
   DNS=$(aws ec2 describe-instances --instance-ids "$EXIST_ID" --region "$AWS_REGION" --profile "$AWS_PROFILE" \
@@ -103,33 +108,109 @@ fi
 AMI_ID=$(aws ssm get-parameter --name "$AMI_PARAM" --region "$AWS_REGION" --profile "$AWS_PROFILE" \
   --query Parameter.Value --output text)
 
-# ===== User-Data (Postgres + Schema) =====
+# ===== User-Data (Postgres + Schema, AL2023-kompatibel) =====
 UD=$(cat <<'EOT'
 #!/bin/bash
 set -euxo pipefail
-dnf -y update
-dnf -y install postgresql15 postgresql15-server postgresql15-contrib curl
 
-/usr/bin/postgresql-setup --initdb
-sed -i "s/^#listen_addresses.*/listen_addresses = '*'/" /var/lib/pgsql/data/postgresql.conf
+log() { echo "[USER-DATA] $*"; }
 
-# VPC-CIDR für interne Auth
-curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/ > /tmp/macs
-MAC=$(head -n1 /tmp/macs)
-VPC_CIDR=$(curl -s "http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/vpc-ipv4-cidr-block")
-echo "host    all             all             ${VPC_CIDR}            md5" >> /var/lib/pgsql/data/pg_hba.conf
+# --- Repos/Caches auffrischen (Retry) ---
+for i in 1 2 3; do
+  if dnf -y makecache && dnf -y upgrade --refresh; then break; fi
+  sleep 5
+  [ "$i" -eq 3 ] && { log "dnf upgrade failed"; exit 1; }
+done
 
-systemctl enable --now postgresql
+# --- curl nur installieren, wenn NICHT vorhanden (Konflikte mit curl-minimal vermeiden) ---
+if ! command -v curl >/dev/null 2>&1; then
+  dnf -y install curl || dnf -y install curl-minimal || { log "curl/curl-minimal install failed"; exit 1; }
+fi
 
+# --- PostgreSQL 15 installieren ---
+for i in 1 2 3; do
+  if dnf -y install postgresql15 postgresql15-server postgresql15-contrib; then break; fi
+  sleep 5
+  [ "$i" -eq 3 ] && { log "postgresql install failed"; exit 1; }
+done
+
+# --- Service/Datadir auto-detect (AL2023 nutzt oft -15 & /var/lib/pgsql/15/data) ---
+UNIT="postgresql"
+DATA_DIR="/var/lib/pgsql/data"
+SETUP_CMD="postgresql-setup --initdb"
+if systemctl list-unit-files | grep -q '^postgresql-15\.service'; then
+  UNIT="postgresql-15"
+  DATA_DIR="/var/lib/pgsql/15/data"
+  SETUP_CMD="postgresql-setup --initdb --unit postgresql-15"
+fi
+
+# --- Initialisieren nur wenn nötig ---
+if [ ! -f "$DATA_DIR/PG_VERSION" ]; then
+  if command -v postgresql-setup >/dev/null 2>&1; then
+    $SETUP_CMD
+  else
+    mkdir -p "$DATA_DIR"
+    chown -R postgres:postgres "$(dirname "$DATA_DIR")"
+    sudo -u postgres initdb -D "$DATA_DIR"
+  fi
+fi
+
+# --- Config anpassen: listen_addresses='*' (idempotent) ---
+if grep -Eq '^[#\s]*listen_addresses' "$DATA_DIR/postgresql.conf"; then
+  sed -i "s|^[#\s]*listen_addresses\s*=.*|listen_addresses = '*'|" "$DATA_DIR/postgresql.conf"
+else
+  echo "listen_addresses = '*'" >> "$DATA_DIR/postgresql.conf"
+fi
+
+# --- VPC-CIDR ermitteln (IMDSv2 mit Fallback auf IMDSv1) ---
+TOKEN=""
+if TOKEN=$(curl -sS -m 2 -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60"); then
+  MACS=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/network/interfaces/macs/)
+  MAC=$(printf "%s" "$MACS" | head -n1)
+  VPC_CIDR=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+    "http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/vpc-ipv4-cidr-block")
+else
+  MAC=$(curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/ | head -n1)
+  VPC_CIDR=$(curl -s "http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/vpc-ipv4-cidr-block")
+fi
+LINE="host    all             all             ${VPC_CIDR}            md5"
+grep -qxF "$LINE" "$DATA_DIR/pg_hba.conf" || echo "$LINE" >> "$DATA_DIR/pg_hba.conf"
+
+# --- Starten & aktivieren ---
+systemctl enable --now "$UNIT"
+
+# --- Warten bis der Port 5432 offen ist ---
+for i in {1..150}; do
+  if ss -ltnp | grep -q ":5432"; then break; fi
+  sleep 1
+done
+if ! ss -ltnp | grep -q ":5432"; then
+  systemctl status "$UNIT" --no-pager || true
+  journalctl -u "$UNIT" --no-pager -n 150 || true
+  exit 1
+fi
+
+# --- DB & User anlegen (idempotent) ---
 sudo -u postgres psql -v ON_ERROR_STOP=1 <<'SQL'
-CREATE USER __DB_USER__ WITH PASSWORD '__DB_PASS__';
-DO $$BEGIN
-   IF NOT EXISTS (SELECT FROM pg_database WHERE datname='__DB_NAME__') THEN
-      CREATE DATABASE __DB_NAME__ OWNER __DB_USER__;
-   END IF;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '__DB_USER__') THEN
+    CREATE ROLE __DB_USER__ LOGIN PASSWORD '__DB_PASS__';
+  END IF;
 END$$;
 
-\c __DB_NAME__
+ALTER ROLE __DB_USER__ WITH PASSWORD '__DB_PASS__';
+ALTER ROLE __DB_USER__ CREATEDB;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '__DB_NAME__') THEN
+    CREATE DATABASE __DB_NAME__ OWNER __DB_USER__;
+  END IF;
+END$$;
+
+\c __DB_NAME__;
+
 CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE IF NOT EXISTS users (
@@ -169,7 +250,6 @@ CREATE TABLE IF NOT EXISTS outfits (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- sicherstellen: outfit_items hat image_path
 ALTER TABLE IF EXISTS outfit_items ADD COLUMN IF NOT EXISTS image_path TEXT;
 
 CREATE TABLE IF NOT EXISTS outfit_items (
@@ -204,10 +284,13 @@ CREATE INDEX IF NOT EXISTS idx_items_tags_gin ON items USING GIN (tags);
 CREATE INDEX IF NOT EXISTS idx_prompts_user ON prompts(user_id);
 CREATE INDEX IF NOT EXISTS idx_outfits_user ON outfits(user_id);
 SQL
+
+# finaler Status (sichtbar in der Konsole)
+systemctl is-active "$UNIT" || (journalctl -u "$UNIT" -n 200 --no-pager; exit 1)
 EOT
 )
 
-
+# Platzhalter ersetzen
 UD="${UD//__DB_NAME__/$DB_NAME}"
 UD="${UD//__DB_USER__/$DB_USER}"
 DB_PASS_ESC=${DB_PASS//\'/\'\"\'\"\'}
