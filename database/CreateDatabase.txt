@@ -40,6 +40,7 @@ CREATE TABLE outfit_items (
   outfit_id BIGINT REFERENCES outfits(id) ON DELETE CASCADE,
   item_id BIGINT REFERENCES items(id) ON DELETE CASCADE,
   role TEXT CHECK (role IN ('top','bottom','shoes','outerwear')),
+  image_path TEXT,
   UNIQUE (outfit_id, item_id)
 );
 
