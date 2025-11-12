@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ===== .env laden =====
-ENV_FILE="${ENV_FILE:-$(cd "$(dirname "$0")/.." && pwd)/.env}"
-if [[ -f "$ENV_FILE" ]]; then set -o allexport; . "$ENV_FILE"; set +o allexport; else echo "[WARN] .env fehlt: $ENV_FILE"; fi
+# ==== .env robust laden ====
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -o allexport
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +o allexport
+else
+  echo "[WARN] .env nicht gefunden: $ENV_FILE – nutze aktuelle ENV"
+fi
 
 # ===== Defaults =====
 AWS_PROFILE="${AWS_PROFILE:-default}"
