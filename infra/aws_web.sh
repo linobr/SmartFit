@@ -29,7 +29,6 @@ MY_IP_CIDR="${MY_IP_CIDR:-}"
 
 # Upload-Limits
 UPLOAD_MAX_MB="${UPLOAD_MAX_MB:-10}"
-# robust rechnen, falls ENV String enthält
 UPLOAD_MAX_MB_NUM="$(printf '%s\n' "$UPLOAD_MAX_MB" | tr -cd '0-9')"
 [[ -z "$UPLOAD_MAX_MB_NUM" ]] && UPLOAD_MAX_MB_NUM=10
 POST_MAX_MB=$((UPLOAD_MAX_MB_NUM + 2))
@@ -111,7 +110,7 @@ aws ec2 authorize-security-group-ingress --region "$AWS_REGION" --profile "$AWS_
 AMI_ID=$(aws ssm get-parameter --name "$AMI_PARAM" --region "$AWS_REGION" --profile "$AWS_PROFILE" \
   --query Parameter.Value --output text)
 
-# ===== User-Data (Apache/PHP + App) =====
+# ===== User-Data (Apache/PHP + App) – DB-Werte hart gesetzt in db.php =====
 DB_PASS_ESC=${DB_PASS//\'/\'\"\'\"\'}
 
 UD=$(cat <<'EOF'
@@ -119,7 +118,6 @@ UD=$(cat <<'EOF'
 set -euxo pipefail
 
 dnf -y update
-# Kein "curl" installieren, um Konflikte mit curl-minimal zu vermeiden
 dnf -y install httpd php php-pgsql php-cli
 
 echo "upload_max_filesize=__UPLOAD_MAX_MB__M" > /etc/php.d/99-smartfit.ini
@@ -129,35 +127,22 @@ mkdir -p /var/www/html/uploads
 chown -R apache:apache /var/www/html/uploads
 chmod 775 /var/www/html/uploads
 
-# App-ENV
-cat >/etc/sysconfig/httpd-smartfit <<ENV
-SMARTFIT_DB_HOST=__DB_PRIVATE_IP__
-SMARTFIT_DB_NAME=__DB_NAME__
-SMARTFIT_DB_USER=__DB_USER__
-SMARTFIT_DB_PASS='__DB_PASS_ESC__'
-SMARTFIT_UPLOAD_MAX_MB=__UPLOAD_MAX_MB__
-ENV
-
-# Systemd Drop-in statt Unit-Datei patchen
-mkdir -p /etc/systemd/system/httpd.service.d
-cat >/etc/systemd/system/httpd.service.d/override.conf <<'CONF'
-[Service]
-EnvironmentFile=/etc/sysconfig/httpd-smartfit
-CONF
-
-# Mini-App
+# db.php mit festen Parametern
 cat >/var/www/html/db.php <<'PHP'
 <?php
-$host = getenv('SMARTFIT_DB_HOST'); $db = getenv('SMARTFIT_DB_NAME');
-$user = getenv('SMARTFIT_DB_USER'); $pass = getenv('SMARTFIT_DB_PASS');
+$host = '__DB_PRIVATE_IP__';
+$db   = '__DB_NAME__';
+$user = '__DB_USER__';
+$pass = '__DB_PASS_ESC__';
+
 try {
-  $pdo = new PDO("pgsql:host=$host;port=5432;dbname=$db",$user,$pass,[
-    PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC
+  $pdo = new PDO("pgsql:host=$host;port=5432;dbname=$db", $user, $pass, [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
   ]);
 } catch (Throwable $e) {
   http_response_code(500);
-  echo "DB-Fehler: ".htmlspecialchars($e->getMessage(),ENT_QUOTES,'UTF-8');
+  echo "DB-Fehler: ".htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
   exit;
 }
 PHP
@@ -191,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_FILES['image']) && $_FILES['i
 <header><h2>SmartFit · Upload</h2><nav><a href="/index.php">Upload</a><a href="/gallery.php">Galerie</a></nav></header>
 <?php if ($msg!==""): ?><p><mark><?=e($msg)?></mark></p><?php endif; ?>
 <form method="post" enctype="multipart/form-data">
-  <label>Bild (JPEG/PNG/WEBP, max <?= (int)getenv('SMARTFIT_UPLOAD_MAX_MB') ?>MB)
+  <label>Bild (JPEG/PNG/WEBP, max <?= (int)__UPLOAD_MAX_MB__ ?>MB)
     <input type="file" name="image" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
   </label>
   <button>Hochladen</button>
@@ -220,7 +205,6 @@ cat >/var/www/html/index.html <<'HTML'
 <!doctype html><meta http-equiv="refresh" content="0; url=/index.php">
 HTML
 
-systemctl daemon-reload
 systemctl enable --now httpd
 EOF
 )
@@ -245,7 +229,6 @@ ARGS=( --image-id "$AMI_ID" --instance-type "$WEB_INSTANCE_TYPE"
 IID=$(aws ec2 run-instances --region "$AWS_REGION" --profile "$AWS_PROFILE" \
   "${ARGS[@]}" --query "Instances[0].InstanceId" --output text)
 
-# Warten bis Status-Checks OK
 aws ec2 wait instance-status-ok --instance-ids "$IID" --region "$AWS_REGION" --profile "$AWS_PROFILE"
 
 DNS=$(aws ec2 describe-instances --instance-ids "$IID" --region "$AWS_REGION" --profile "$AWS_PROFILE" \

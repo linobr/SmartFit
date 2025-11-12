@@ -3,17 +3,25 @@ set -euo pipefail
 
 # ==== .env robust laden ====
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
+SEARCH_DIR="$SCRIPT_DIR"
+
+# Suche .env nach oben, bis Root erreicht ist
+while [[ "$SEARCH_DIR" != "/" && ! -f "$SEARCH_DIR/.env" ]]; do
+  SEARCH_DIR="$(dirname "$SEARCH_DIR")"
+done
+
+ENV_FILE="$SEARCH_DIR/.env"
 
 if [[ -f "$ENV_FILE" ]]; then
   set -o allexport
   # shellcheck disable=SC1090
   . "$ENV_FILE"
   set +o allexport
+  echo "[INFO] .env geladen: $ENV_FILE"
 else
-  echo "[WARN] .env nicht gefunden: $ENV_FILE – nutze aktuelle ENV"
+  echo "[WARN] .env nicht gefunden – nutze aktuelle ENV"
 fi
+
 
 # ===== Defaults =====
 AWS_PROFILE="${AWS_PROFILE:-default}"
