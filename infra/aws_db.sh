@@ -14,7 +14,7 @@ DB_SG_NAME="${DB_SG_NAME:-${STACK_PREFIX}-db-sg}"
 DB_INSTANCE_TYPE="${DB_INSTANCE_TYPE:-t3.micro}"
 DB_NAME="${DB_NAME:-smartfit}"
 DB_USER="${DB_USER:-smartfit_admin}"
-DB_PASS="${DB_PASS:-ChangeMe_StrongPass123!}"
+DB_PASS="${DB_PASS:-Riethuesli>12345}"
 AMI_PARAM="/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 
 # ===== Checks =====
@@ -23,12 +23,31 @@ for v in AWS_PROFILE AWS_REGION STACK_PREFIX DB_NAME DB_USER DB_PASS; do
 done
 
 # ===== Default VPC/Subnet =====
+# ===== Default VPC =====
 VPC_ID=$(aws ec2 describe-vpcs --region "$AWS_REGION" --profile "$AWS_PROFILE" \
   --filters Name=isDefault,Values=true --query "Vpcs[0].VpcId" --output text)
-[[ "$VPC_ID" == "None" || -z "$VPC_ID" ]] && { echo "[ERR] Keine Default VPC"; exit 1; }
+[[ -z "$VPC_ID" || "$VPC_ID" == "None" ]] && { echo "[ERR] Keine Default VPC."; exit 1; }
 
-SUBNET_ID=$(aws ec2 describe-subnets --region "$AWS_REGION" --profile "$AWS_PROFILE" \
-  --filters Name=vpc-id,Values="$VPC_ID" --query "Subnets[0].SubnetId" --output text)
+# ===== AZ finden, die den Instance-Typ unterstützt =====
+AZS=$(aws ec2 describe-instance-type-offerings \
+  --region "$AWS_REGION" --profile "$AWS_PROFILE" \
+  --location-type availability-zone \
+  --filters Name=instance-type,Values="$DB_INSTANCE_TYPE" \
+  --query "InstanceTypeOfferings[].Location" --output text)
+
+SUBNET_ID=""
+for az in $AZS; do
+  cand=$(aws ec2 describe-subnets --region "$AWS_REGION" --profile "$AWS_PROFILE" \
+    --filters Name=vpc-id,Values="$VPC_ID" Name=availability-zone,Values="$az" \
+    --query "Subnets[?DefaultForAz==\`true\`][0].SubnetId" --output text)
+  [[ -z "$cand" || "$cand" == "None" ]] && cand=$(aws ec2 describe-subnets --region "$AWS_REGION" --profile "$AWS_PROFILE" \
+    --filters Name=vpc-id,Values="$VPC_ID" Name=availability-zone,Values="$az" \
+    --query "Subnets[0].SubnetId" --output text)
+  if [[ -n "$cand" && "$cand" != "None" ]]; then SUBNET_ID="$cand"; SELECTED_AZ="$az"; break; fi
+done
+[[ -z "$SUBNET_ID" ]] && { echo "[ERR] Kein passendes Subnet für $DB_INSTANCE_TYPE gefunden."; exit 1; }
+echo "[INFO] Verwende Subnet $SUBNET_ID in AZ $SELECTED_AZ (unterstützt $DB_INSTANCE_TYPE)"
+
 
 # ===== DB SG (nur intern, Port 5432 – Ingress-Berechtigung folgt im Web-Script) =====
 DB_SG_ID=$(aws ec2 describe-security-groups --region "$AWS_REGION" --profile "$AWS_PROFILE" \
@@ -67,7 +86,7 @@ AMI_ID=$(aws ssm get-parameter --name "$AMI_PARAM" --region "$AWS_REGION" --prof
   --query Parameter.Value --output text)
 
 # ===== User-Data (Postgres + Schema) =====
-read -r -d '' UD <<'EOT'
+UD=$(cat <<'EOT'
 #!/bin/bash
 set -euxo pipefail
 dnf -y update
@@ -132,7 +151,7 @@ CREATE TABLE IF NOT EXISTS outfits (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Sicherstellen: outfit_items hat image_path
+-- sicherstellen: outfit_items hat image_path
 ALTER TABLE IF EXISTS outfit_items ADD COLUMN IF NOT EXISTS image_path TEXT;
 
 CREATE TABLE IF NOT EXISTS outfit_items (
@@ -168,6 +187,8 @@ CREATE INDEX IF NOT EXISTS idx_prompts_user ON prompts(user_id);
 CREATE INDEX IF NOT EXISTS idx_outfits_user ON outfits(user_id);
 SQL
 EOT
+)
+
 
 UD="${UD//__DB_NAME__/$DB_NAME}"
 UD="${UD//__DB_USER__/$DB_USER}"
